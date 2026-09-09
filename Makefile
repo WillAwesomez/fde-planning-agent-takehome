@@ -21,13 +21,13 @@ setup:            ## create a venv and install dependencies
 	@echo "done. next:  make test"
 
 test:             ## run the offline contract tests
-	cd src && ../$(PY) -m pytest -q
+	$(PY) -m pytest -q src
 
 app:              ## launch the Streamlit UI (offline by default)
-	cd src && ../$(STREAMLIT) run itinerary_app.py
+	$(STREAMLIT) run src/itinerary_app.py
 
 demo:             ## run one goal end-to-end in the terminal and print the trace
-	cd src && ../$(PY) run_once.py "Plan a one-day layover in Tokyo on a 5000 yen budget."
+	$(PY) src/run_once.py "Plan a one-day layover in Tokyo on a 5000 yen budget."
 
 clean:
 	rm -rf $(VENV) .pytest_cache src/__pycache__ src/tests/__pycache__

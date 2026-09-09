@@ -279,7 +279,64 @@ def run_planning_agent(
         A PlanRun. This function does not raise for ordinary failures -- it
         reports them through stopped_reason and final_answer.
     """
-    raise NotImplementedError("TODO A2: implement the plan/act/observe/replan loop")
+    if not isinstance(goal, str) or not goal.strip():
+        return _stopped(goal, [], "error", "Please type a goal first.")
+
+    goal = goal.strip()
+
+    drafted = list(plan) if plan is not None else write_plan(goal, max_steps=max_steps)
+    if not drafted:
+        return _stopped(
+            goal,
+            [],
+            "error",
+            "Sorry, I couldn't draft a plan for that goal. Try rephrasing it.",
+        )
+
+    try:
+        approved = True if approve_plan is None else approve_plan(drafted)
+    except Exception:
+        approved = False
+    if not approved:
+        return _stopped(goal, drafted, "cancelled", "Cancelled before any tool ran.")
+
+    recorder = _RunRecorder(goal, drafted, on_step_done=on_step_done)
+    queue: list[Step] = list(drafted)
+    done: list[tuple[Step, str]] = []
+    revision_count = 0
+
+    while queue:
+        step = queue.pop(0)
+        prior_summary = "\n".join(f"step {s.n}: {obs}" for s, obs in done)
+        result = execute_step(
+            step, goal, prior_summary=prior_summary, max_tool_calls=per_step_tool_calls
+        )
+        recorder.record_step(result)
+        done.append((step, result.observation))
+
+        if (
+            result.observation.startswith("surprise")
+            and revision_count < max_revisions
+            and queue
+        ):
+            before = list(queue)
+            after = revise_plan(
+                goal=goal,
+                done=done,
+                remaining=queue,
+                observation=result.observation,
+                max_steps=max_steps,
+            )
+            queue = list(after)
+            recorder.record_revision(
+                after_step=step.n,
+                trigger=result.observation,
+                before=before,
+                after=queue,
+            )
+            revision_count += 1
+
+    return recorder.finish(stopped_reason="done")
 
 
 # ===========================================================================

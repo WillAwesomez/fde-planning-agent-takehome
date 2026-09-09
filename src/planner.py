@@ -184,7 +184,45 @@ def revise_plan(
     renumbering case; `write_plan` above does not need it, so it does not show
     it. Read `write_plan` first -- it is the same shape of problem.
     """
-    raise NotImplementedError("TODO A1: implement revise_plan")
+    if not remaining:
+        return []
+
+    goal = (goal or "").strip()
+
+    done_lines = "\n".join(
+        f"- step {s.n}: {s.goal} -- {obs}" for s, obs in done
+    ) or "(nothing done yet)"
+    remaining_lines = "\n".join(
+        f"- step {s.n}: {s.goal} [{s.tool_hint}]" for s in remaining
+    )
+
+    user_msg = (
+        f"Original goal:\n{goal}\n\n"
+        f"Already done:\n{done_lines}\n\n"
+        f"Remaining steps (not yet started):\n{remaining_lines}\n\n"
+        f"Observation that just triggered this revision:\n{observation}\n\n"
+        "Decide whether to keep the remaining steps as-is or rewrite them."
+    )
+
+    try:
+        raw = chat(
+            [
+                {"role": "system", "content": REVISER_SYSTEM},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.3,
+            max_tokens=500,
+        )
+    except Exception:
+        raw = ""
+
+    next_start = (done[-1][0].n + 1) if done else remaining[0].n
+    budget = max(max_steps - len(done), 0)
+    steps = _parse_plan(raw, max_steps=budget, expect_start_at=next_start)
+    if not steps:
+        # Garbage or empty reply: never silently drop steps the user approved.
+        return list(remaining)
+    return steps
 
 
 # ===========================================================================
